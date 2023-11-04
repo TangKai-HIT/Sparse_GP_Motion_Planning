@@ -1,9 +1,9 @@
 classdef GPTrajSparseBase < handle
-    %GPTRAJSPARSEBASE base class with abstract methods for sparse GP trajectory
+    %GPTRAJSPARSEBASE base class with abstract methods for sparse GP trajectory in Euclidean space
     %   sparse GP trajectory with O(1) query time complexity, derived from Guass-Markov SDE with sparse kernel
     
     properties
-        supportPts; %support/data points
+        supportPts; %support/data points, N X dim
         supportId; %supportId index
         Q_c; %hyperparameters, white noise covariance
         mu0; %mu of initial state, dim X 1
@@ -17,7 +17,7 @@ classdef GPTrajSparseBase < handle
         %lifted form parameters
         supportKappa; %kernel matrix of support states, dim X dim
         supportKappa_inv; %inverse of kernel matrix
-        supportMu; %Mu of support states, dim X 1
+        supportMu; %Mu of support states, (numsupports*dim) X 1
 
         % util variables
         supportA; %(numsupports*dim) X (numsupports*dim), lower triangular mat
@@ -77,18 +77,7 @@ classdef GPTrajSparseBase < handle
             
             %if require kappa query
             if nargout>1
-                % Phi_0_tau = obj.transMat(queryId, obj.supportId(1));
-                % kappa_tau_tau = Phi_0_tau * obj.kappa0 * Phi_0_tau' + obj.QMat(obj.supportId(1), queryId);
-                kappa_tau_tau = Phi_l_tau * obj.supportKappa(rowId_l, rowId_l) * Phi_l_tau' + Q_query;
-
-                Phi_l_vec = obj.supportA(rowId_l, 1:l_id*obj.dim); %block row mat: Phi(ti, t0~t_{i-1})
-                Q_l_diag = obj.supportQ(1:l_id*obj.dim, 1:l_id*obj.dim); %block diag mat: Q_0 (kappa0) ~ Q_t_{i-1}
-                Q_l = obj.supportQ(rowId_l, rowId_l); %Q_t_i
-
-                H = Phi_l_vec * Q_l_diag * Phi_l_vec';
-                kappa_post = Phi_l_tau * H * Phi_l_tau' + Psi_query * Phi_tau_u * Q_query';
-
-                queryKappa = kappa_tau_tau - kappa_post;
+                queryKappa = Q_query - Psi_query * Phi_tau_u * Q_query';
             end
         end
 
@@ -130,7 +119,56 @@ classdef GPTrajSparseBase < handle
             obj.supportKappa = obj.supportA * obj.supportQ * obj.supportA';
             obj.supportKappa_inv = obj.supportA_inv' * obj.supportQ_inv * obj.supportA_inv;
         end
+    
+        function [tau_samp, Lambda_samp, Psi_samp, mu_samp, sampPts] = upSampleInterval_uniform(obj, l_id, u_id, n_sp)
+            %UPSAMPLEINTERVAL_UNIFORM uniformly upsample in a support state interval  
+            %   Inputs:
+            %       l_id, u_id: lower id and upper id of the interval 
+            %       n_sp: number of samples
+            %   Outputs:
+            %       tau_samp: 1 X n_sp
+            %       Lambda_samp, Psi_samp, mu_samp, sampPts(optional): array, (n_sp*dim) X 1
 
+            l = obj.supportId(l_id);
+            u = obj.supportId(u_id);
+            tau_samp = linspace(l, u, n_sp+2);
+            tau_samp = tau_samp(2:end-1);
+
+            %compute intermedian terms
+            Q_l_samp = zeros(n_sp*obj.dim, n_sp*obj.dim);
+            Phi_samp_u_T = zeros(n_sp*obj.dim, obj.dim);
+            Phi_l_samp = zeros(n_sp*obj.dim, obj.dim);
+            VVec_samp = zeros(n_sp*obj.dim, 1);
+
+            for i=1:n_sp
+                cur_id = (i-1)*obj.dim+1 : i*obj.dim;
+                Q_l_samp(cur_id, cur_id) = obj.QMat(l, tau_samp(i));
+                Phi_samp_u_T(cur_id, :) = obj.transMat(u, tau_samp(i))';
+                Phi_l_samp(cur_id, :) = obj.transMat(tau_samp(i), l);
+                VVec_samp(cur_id, :) = obj.VVec(l, tau_samp(i));
+            end
+
+            rowId_u = l_id*obj.dim+1 : u_id*obj.dim; %term in i+1 index
+            rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in i index
+            Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
+            
+            %compute interpolator
+            Psi_samp = Q_l_samp * Phi_samp_u_T * Q_u_inv; %get Psi_{1~n_sp} sampled vector
+
+            Phi_l_u = obj.transMat(u, l);
+            Lambda_samp = Phi_l_samp - Psi_samp * Phi_l_u; %get Lambda_{1~n_sp} sampled vector
+
+            %interpolation
+            mu_l = obj.supportMu(rowId_l, 1);
+            mu_u = obj.supportMu(rowId_u, 1);
+            xbar_l = obj.supportPts(l_id, :)';
+            xbar_u = obj.supportPts(u_id, :)';
+            mu_samp = Phi_l_samp * mu_l + VVec_samp;
+            
+            if exist("sampPts", "var") %optional output
+                sampPts = mu_samp + Lambda_samp*(xbar_l-mu_l) + Psi_samp*(xbar_u-mu_u);
+            end
+        end
     end
     
 end
