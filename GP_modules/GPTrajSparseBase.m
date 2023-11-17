@@ -47,8 +47,8 @@ classdef GPTrajSparseBase < handle
                 [obj.numsupports, obj.dim] = size(supportPts);
                 obj.mu0 = mu0;
                 obj.kappa0 = kappa0;
-        end
-       
+        end    
+
         function [queryPt, queryKappa] = query(obj, queryId)
             %QUERY query function
             %   fast O(1) query interpolation, note: do not support extrapolation yet  
@@ -120,7 +120,7 @@ classdef GPTrajSparseBase < handle
             obj.supportKappa_inv = obj.supportA_inv' * obj.supportQ_inv * obj.supportA_inv;
         end
     
-        function [tau_samp, Lambda_samp, Psi_samp, mu_samp, sampPts] = upSampleInterval_uniform(obj, l_id, u_id, n_sp)
+        function [tau_samp, Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp] = upSampleInterval_uniform(obj, l_id, u_id, n_sp)
             %UPSAMPLEINTERVAL_UNIFORM uniformly upsample in a support state interval  
             %   Inputs:
             %       l_id, u_id: lower id and upper id of the interval 
@@ -128,11 +128,39 @@ classdef GPTrajSparseBase < handle
             %   Outputs:
             %       tau_samp: 1 X n_sp
             %       Lambda_samp, Psi_samp, mu_samp, sampPts(optional): array, (n_sp*dim) X 1
-
+            %       mu_samp: (n_sp*dim) X 1, mu of sampled points 
+            %       sampPts (optional): (n_sp*dim) X 1, sampled points 
+            %       kappa_samp (optional): (n_sp*dim) X (n_sp*dim)
+            
             l = obj.supportId(l_id);
             u = obj.supportId(u_id);
+
             tau_samp = linspace(l, u, n_sp+2);
             tau_samp = tau_samp(2:end-1);
+
+            if nargout>5 %optional output
+                [Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp] = obj.upSampleInterval(l_id, u_id, tau_samp);
+            elseif nargout>4 %optional output
+                [Lambda_samp, Psi_samp, mu_samp, sampPts] = obj.upSampleInterval(l_id, u_id, tau_samp);
+            else
+                [Lambda_samp, Psi_samp, mu_samp] = obj.upSampleInterval(l_id, u_id, tau_samp);
+            end
+        end
+
+        function [Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp] = upSampleInterval(obj, l_id, u_id, tau_samp)
+            %UPSAMPLEINTERVAL upsample in a support state interval given samples of index 
+            %   Inputs:
+            %       l_id, u_id: lower id and upper id of the interval 
+            %       tau_samp: interpolation index samples
+            %   Outputs:
+            %       Lambda_samp, Psi_samp, mu_samp, sampPts(optional): array, (n_sp*dim) X 1
+            %       mu_samp: (n_sp*dim) X 1, mu of sampled points 
+            %       sampPts (optional): (n_sp*dim) X 1, sampled points 
+            %       kappa_samp (optional): (n_sp*dim) X (n_sp*dim)
+            
+            l = obj.supportId(l_id);
+            u = obj.supportId(u_id);
+            n_sp = length(tau_samp);
 
             %compute intermedian terms
             Q_l_samp = zeros(n_sp*obj.dim, n_sp*obj.dim);
@@ -148,12 +176,18 @@ classdef GPTrajSparseBase < handle
                 VVec_samp(cur_id, :) = obj.VVec(l, tau_samp(i));
             end
 
-            rowId_u = l_id*obj.dim+1 : u_id*obj.dim; %term in i+1 index
+            rowId_u = (u_id-1)*obj.dim+1 : u_id*obj.dim; %term in i+1 index
             rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in i index
-            Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
+
+            if u_id>l_id+1 %support state not adjancent (vital)
+                Q_u_inv = inv(obj.QMat(l, u));
+            else %support state adjacent
+                Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
+            end
             
             %compute interpolator
-            Psi_samp = Q_l_samp * Phi_samp_u_T * Q_u_inv; %get Psi_{1~n_sp} sampled vector
+            gamma_samp = Q_l_samp * Phi_samp_u_T; %get gamma_{1~n_sp} sampled vector
+            Psi_samp = gamma_samp * Q_u_inv; %get Psi_{1~n_sp} sampled vector
 
             Phi_l_u = obj.transMat(u, l);
             Lambda_samp = Phi_l_samp - Psi_samp * Phi_l_u; %get Lambda_{1~n_sp} sampled vector
@@ -165,10 +199,26 @@ classdef GPTrajSparseBase < handle
             xbar_u = obj.supportPts(u_id, :)';
             mu_samp = Phi_l_samp * mu_l + VVec_samp;
             
-            if exist("sampPts", "var") %optional output
+            if nargout>3 %optional output
                 sampPts = mu_samp + Lambda_samp*(xbar_l-mu_l) + Psi_samp*(xbar_u-mu_u);
             end
+
+            if nargout>4 %optional output
+                %A--trans mat
+                A = eye(n_sp*obj.dim);
+                for i = 2:n_sp
+                    cur_rowId = (i-1)*obj.dim+1:i*obj.dim;
+                    for j = 1:i-1
+                        cur_colId = (j-1)*obj.dim+1:j*obj.dim; 
+                        A(cur_rowId, cur_colId) = obj.transMat(tau_samp(i), tau_samp(j));
+                    end
+                end
+                
+                H = A*Q_l_samp;
+                kappa_samp = (H + H' - Q_l_samp) - Psi_samp*gamma_samp';
+            end
         end
+
     end
     
 end
