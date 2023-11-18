@@ -4,12 +4,38 @@ A matlab repository containing utils and demos of sparse GP, aiming to explore t
 
 **Reference:**  
 
-[1] Mukadam, Mustafa, et al. "Continuous-time Gaussian process motion planning via probabilistic inference." The International Journal of Robotics Research 37.11 (2018): 1319-1340.  
+    [1] Mukadam, Mustafa, et al. "Continuous-time Gaussian process motion planning via probabilistic inference." The International Journal of Robotics Research 37.11 (2018): 1319-1340.  
 
-[2] Anderson, Sean, et al. "Batch nonlinear continuous-time trajectory estimation as exactly sparse Gaussian process regression." Autonomous Robots 39 (2015): 221-238. 
- 
-[3] Dong, Jing, et al. "Sparse Gaussian processes on matrix lie groups: A unified framework for optimizing continuous-time trajectories." 2018 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2018.  
+    [2] Anderson, Sean, et al. "Batch nonlinear continuous-time trajectory estimation as exactly sparse Gaussian process regression." Autonomous Robots 39 (2015): 221-238. 
+    
+    [3] Dong, Jing, et al. "Sparse Gaussian processes on matrix lie groups: A unified framework for optimizing continuous-time trajectories." 2018 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2018.  
+
+
+**Requirements:**  
+
+- `matlab version >= 2019`
+  - `robotics system tool box`
+  - `image processing tool box`
+  - `optimization tool box`  
+
 
 ## 1.sparse GP derived from SDE  
 
-source code in `\GP_modules`  
+source code in `\GP_modules`   
+
+### (1) 1-D sparse GP smoothing
+`min-Acc prior`
+![min-acc prior](./GP_modules/results/1D_test_results/sparse_gp_minAcc_1D.jpg)
+
+`min-Jerk prior`
+![min-jerk prior](./GP_modules/results/1D_test_results/sparse_gp_minJerk_1D.jpg)
+
+`min-Snap prior`
+![min-Snap prior](./GP_modules/results/1D_test_results/sparse_gp_minSnap_1D.jpg)
+
+### (2) sparse GP smoothing on SO(3)
+`test path`
+![](./GP_modules/results/SO3_test_results/test_path_sphere.jpg)
+
+`min-Acc prior smoothing`
+![](./GP_modules/results/1D_test_results/../SO3_test_results/min_acc_gp_path_sphere.jpg)

@@ -28,7 +28,7 @@ scatter(ax, GPTrajSparse.supportId, GPTrajSparse.supportPts(:, dim), 'black', 'f
 min_y = min(sampleStates(:, dim));
 max_y = max(sampleStates(:, dim));
 mid_y = (min_y + max_y)/2;
-gap = max_y - min_y;
+gap = max_y - min_y+1e-3;
 ylim([mid_y-3*gap/2, mid_y+3*gap/2]);
 grid on;
 
