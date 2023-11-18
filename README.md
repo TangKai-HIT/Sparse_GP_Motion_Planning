@@ -39,3 +39,23 @@ source code in `\GP_modules`
 
 `min-Acc prior smoothing`
 ![](./GP_modules/results/1D_test_results/../SO3_test_results/min_acc_gp_path_sphere.jpg)
+
+## 2.sparse GP motion planning
+
+source codes in `/gpmp`
+
+### 2-D point trajectory planning results: 
+```matlab
+% init coeffs
+omega = 3000; %obs cost coeffs
+lambda = 1; %prior cost coeffs
+eta = 100; %regularization coeffs
+
+options = gpmp_optimset_init();
+options.FixedStateId = [1, 5];
+options.MaxIter = 500;
+options.TolFun = 1e-2;
+```
+
+`path history:`  
+![](./gpmp/results/result1_fixbound2D/traj_deform_history.jpg)
