@@ -1,0 +1,14 @@
+# init coeffs
+omega = 3000; %obs cost coeffs
+lambda = 1; %prior cost coeffs
+eta = 100; %regularization coeffs
+
+options = gpmp_optimset_init();
+options.FixedStateId = [1, 5];
+options.MaxIter = 500;
+options.TolFun = 1e-2;
+
+#outputs
+solve time: 0.0033 (s)
+iterations: 8
+exitFlag: 1
