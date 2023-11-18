@@ -17,6 +17,11 @@ classdef GPTrajSparseMinAcc < GPTrajSparseBase
             end
             obj@GPTrajSparseBase(supportPts, supportId, Q_c, mu0, kappa0); %father class init
         end
+        
+        function copyObj = copy(obj)
+            %COPY return the handle of a newly copied obj
+            copyObj = GPTrajSparseMinAcc(obj.supportPts, obj.supportId, obj.Q_c, obj.mu0, obj.kappa0);
+        end
 
         function Phi = transMat(obj, t, s) 
             %TRANSMAT state transition matrix (s->t)
