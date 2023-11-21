@@ -1,5 +1,5 @@
 classdef gpmpBound2D < gpmpBase
-    %GPMPBOUND2D gpmp with fixed bound in 2D Euclidean space, with 2D cost map (SDF)
+    %GPMPBOUND2D gpmp with fixed bound in 2D Euclidean space, with 2D signed distance field (SDF)
     %   using conditioned distribution between 2 near states
 
     properties
@@ -17,15 +17,18 @@ classdef gpmpBound2D < gpmpBase
     end
 
     methods
-        function obj = gpmpBound2D(gpSparseSets, varDim, eta, omega, lambda, options)
+        function obj = gpmpBound2D(gpSparseSets, varDim, order, eta, omega, lambda, options, constraints)
             %GPMPBOUND2D suppose bounded by 2 fixed ends
-            %   gpSparseSets: init struct generate by gpSparse_init_set() function, min-jerk traj is required
-
-            gpTrajSparse = GPTrajSparseMinJerk(gpSparseSets.supportPts, gpSparseSets.supportId, gpSparseSets.Q_c, gpSparseSets.mu0, gpSparseSets.kappa0);
+            %   gpSparseSets: init struct generate by gpSparse_init_set() function, min-jerk/min-snap traj is required
+            %   order: 3~4
             
-            order = 3;
+            if order==3
+                gpTrajSparse = GPTrajSparseMinJerk(gpSparseSets.supportPts, gpSparseSets.supportId, gpSparseSets.Q_c, gpSparseSets.mu0, gpSparseSets.kappa0);
+            elseif order==4
+                gpTrajSparse = GPTrajSparseMinSnap(gpSparseSets.supportPts, gpSparseSets.supportId, gpSparseSets.Q_c, gpSparseSets.mu0, gpSparseSets.kappa0);
+            end
 
-            obj@gpmpBase(gpTrajSparse, varDim, order, eta, omega, lambda, options, []);
+            obj@gpmpBase(gpTrajSparse, varDim, order, eta, omega, lambda, options, constraints);
 
             %update conditioned kappa on middle states
             midState_Id = obj.gpTrajSparse.supportId(2:end-1);
@@ -87,7 +90,7 @@ classdef gpmpBound2D < gpmpBase
         
         %% Optimization:
         function results = solve(obj)
-            %SOLVE solve unconstrained optimization problem with fixed support states at 2 ends, take interpolating points as optimization variables
+            %SOLVE solve optimization problem with fixed support states at 2 ends, use interpolation
             %   exit_flag: 1-converged; 0-reached max iterations; -1-failed
 
             results = struct("x0", obj.gpTrajSparse.supportPts, "x_solve", [], "cost", [], "costHistory", [], "stateHistory", [], "exitFlag", -1, "steps", []);
@@ -107,6 +110,83 @@ classdef gpmpBound2D < gpmpBase
             if obj.options.RecStateHis
                 obj.stateHistory = x_next;
             end
+            
+            %constrained problem settings
+            if ~isempty(obj.constraints)
+                %init qp params
+                H = obj.eta*obj.kappa_bound_inv; %Hessian in QP
+                H=(H+H')/2;
+                
+                %init warm-start obj
+                if obj.options.UseOSQP %use osqp solver
+                    %to do...
+                else
+                    qp_options = optimoptions('quadprog','Algorithm','active-set');
+                    qp_ws = optimwarmstart(x_next(obj.activeId), qp_options); %qp warm-start
+                end
+
+                %init constraints
+                activeSampId = obj.stateDim+1:obj.sumSampDim-obj.stateDim;
+                fixHeadId = 1:obj.stateDim;
+                fixEndId = obj.sumSupportDim-obj.stateDim+1:obj.sumSupportDim;
+                M_bar = obj.M_samp(activeSampId, obj.activeId); %active samp matrix
+                M_f = [obj.M_samp(activeSampId, fixHeadId), obj.M_samp(activeSampId, fixEndId)]; %fixed part
+                x_f = [x_next(fixHeadId); x_next(fixEndId)];
+
+                A = [M_bar; -M_bar];
+                numActiveSamp = (obj.numTotal-2)*obj.stateDim;
+                b = [inf*ones(numActiveSamp, 1); -inf*ones(numActiveSamp, 1)];                
+                
+                if ~isempty(obj.constraints.posRange) %pos constraints
+                    posId = 1 : obj.stateDim : numActiveSamp;
+                    for i=1:obj.varDim
+                        posId = posId + (i-1);
+                        %upper bound
+                        b(posId) = obj.constraints.posRange(i, 2);
+                        %lower bound
+                        b(posId + numActiveSamp) = -obj.constraints.posRange(i, 1);
+                    end
+                end
+
+                if ~isempty(obj.constraints.velRange) %vel constraints
+                    velId = obj.varDim+1 : obj.stateDim : numActiveSamp;
+                    for i=1:obj.varDim
+                        velId = velId + (i-1);
+                        %upper bound
+                        b(velId) = obj.constraints.velRange(i, 2);
+                        %lower bound
+                        b(velId + numActiveSamp) = -obj.constraints.velRange(i, 1);
+                    end
+                end
+
+                if ~isempty(obj.constraints.accRange) %acc constraints
+                    accId = 2*obj.varDim+1 : obj.stateDim : numActiveSamp;
+                    for i=1:obj.varDim
+                        accId = accId + (i-1);
+                        %upper bound
+                        b(accId) = obj.constraints.accRange(i, 2);
+                        %lower bound
+                        b(accId + numActiveSamp) = -obj.constraints.accRange(i, 1);
+                    end
+                end
+
+                if ~isempty(obj.constraints.jerkRange) %jerk constraints
+                    jerkId = 3*obj.varDim+1 : obj.stateDim : numActiveSamp;
+                    for i=1:obj.varDim
+                        jerkId = jerkId + (i-1);
+                        %upper bound
+                        b(jerkId) = obj.constraints.jerkRange(i, 2);
+                        %lower bound
+                        b(jerkId + numActiveSamp) = -obj.constraints.jerkRange(i, 1);
+                    end
+                end
+            end
+
+            b = b - [M_f*x_f; -M_f*x_f]; %reduce fixed parts
+
+            rmId = find(b==inf | b==-inf);
+            b(rmId) = []; %remove unbounded constraints
+            A(rmId, :) = [];
 
             %iteration
             results.exitFlag = 0;
@@ -119,10 +199,18 @@ classdef gpmpBound2D < gpmpBase
                 
                 x_old = x_next;
                 total_cost_old = total_cost_next;
-
-                obs_grad = obj.M_samp' * obj.obsGrad(x_old);
-                step = 1/obj.eta * (obj.lambda * (x_old(obj.activeId) - obj.mu_bound) + obj.omega * obj.kappa_bound * obs_grad(obj.activeId));
-                x_next(obj.activeId) = x_old(obj.activeId) - step;
+                
+                %one-step decent
+                if isempty(obj.constraints) %use covariant gradient decent
+                    obs_grad = obj.M_samp' * obj.obsGrad(x_old);
+                    step = 1/obj.eta * (obj.lambda * (x_old(obj.activeId) - obj.mu_bound) + obj.omega * obj.kappa_bound * obs_grad(obj.activeId));
+                    x_next(obj.activeId) = x_old(obj.activeId) - step;
+                else %use SQP with trust region/regulation
+                    obs_grad = obj.M_samp' * obj.obsGrad(x_old);
+                    f = obj.omega*obs_grad(obj.activeId) + obj.kappa_bound_inv*(obj.lambda * (x_old(obj.activeId) - obj.mu_bound) - obj.eta*x_old(obj.activeId));
+                    [qp_ws, ~, qp_exitflag, ~, ~] = quadprog(H,f,A,b,[],[],[],[],qp_ws);
+                    x_next(obj.activeId) = qp_ws.X;
+                end
 
                 obs_cost_next = obj.obsCost(x_next);
                 prior_cost_next = obj.gpPriorCost(x_next);
@@ -154,7 +242,7 @@ classdef gpmpBound2D < gpmpBase
             results.steps = i;
 
             % obj.gpTrajSparse.supportPts = results.x_solve;
-        end
+        end       
 
         %% Utils
         function plotDeformHis(obj, ax, cmapHandle, numPlots)

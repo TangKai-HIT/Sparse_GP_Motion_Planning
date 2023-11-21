@@ -8,4 +8,5 @@ options.TolCon = 1e-3;
 options.RecCostHis = true; %record cost history
 options.RecStateHis = true; %record variable states history
 options.FixedStateId = []; %fixed support states indexes
+options.UseOSQP = false; %use osqp solver flag
 end

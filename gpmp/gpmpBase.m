@@ -27,6 +27,9 @@ classdef gpmpBase < handle
         M_samp = 1; %sampling matrix
         mu_samp; %sampled state mu vector, ((numSamples+numSupports)*stateDim X 1)
         tau_samp; %sampled state index
+        
+        sumSupportDim; %total sum of dimensions of all support states
+        sumSampDim; %total sum of dimensions of all sampled states(including support states)
 
         costHistory = struct("obsCost",[], "gpCost", [], "totalCost", []);
         stateHistory;
@@ -52,6 +55,8 @@ classdef gpmpBase < handle
 
             obj.options = options;
             obj.constraints = constraints;
+            
+            obj.sumSupportDim = obj.numSupports * obj.stateDim;
 
             obj.upSampleByNums(zeros(1, obj.numIntervals)); %upsample
         end
@@ -68,7 +73,9 @@ classdef gpmpBase < handle
             obj.resolutions = intervalLen ./ (numSamples+1);
             
             obj.numTotal = sum(obj.numSamples) + obj.numSupports;
-
+            
+            obj.sumSampDim = obj.numTotal * obj.stateDim;
+            
             %update M matrix & mu vector
             obj.M_samp = zeros(obj.numTotal*obj.stateDim, obj.numSupports*obj.stateDim);
             obj.mu_samp = zeros(obj.numTotal*obj.stateDim, 1);
