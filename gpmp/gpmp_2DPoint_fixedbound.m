@@ -32,13 +32,6 @@ t_support = linspace(0, 3, N);
 [p_sup, pd_sup, pdd_sup]=cubicpolytraj([p_start', p_end'], t_support([1, N]), t_support);
 supportPts = [p_sup', pd_sup', pdd_sup'];
 
-% trapveltraj samples 
-% (note: don't use non smooth curve as initiation, otherwise the states would move far away from original place)
-% N = 5;
-% [p_sup, pd_sup, pdd_sup, t_support, ~]=trapveltraj([p_start', p_end'], N,"PeakVelocity",0.5);
-% % hold on; plot(p(1, :), p(2, :), '-b', 'LineWidth', 1); 
-% supportPts = [p_sup', pd_sup', pdd_sup'];
-
 %% Define params, cost functions & init gpmp planner
 % init prior params
 Q_c = diag([0.1, 0.1]); %noise variance at each dimension
@@ -59,9 +52,9 @@ options.TolFun = 1e-2;
 gpSparseSets = gpSparse_init_set(supportPts, t_support, Q_c, supportPts(1, :)', kappa0);
 % minJerkTraj = GPTrajSparseMinJerk(supportPts, t_support, Q_c, supportPts(1, :)', kappa0);
 varDim = 2; %2D
+order = 3;
 
-gpmpPlanner2D = gpmpBound2D(gpSparseSets, varDim, eta, omega, lambda, options);
-% gpmpPlanner2D = gpmpUncon2D(minJerkTraj, varDim, order, eta, lambda, options);
+gpmpPlanner2D = gpmpBound2D(gpSparseSets, varDim, order, eta, omega, lambda, options, []);
 
 % SDF function handles
 gpmpPlanner2D.disFieldfn = @(xi) value_wpset_map( xi, cost_map ); % distance field evaluation function handle
