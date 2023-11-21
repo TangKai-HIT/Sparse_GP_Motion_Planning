@@ -33,7 +33,14 @@ source code in `\GP_modules`
 `min-Snap prior`
 ![min-Snap prior](./GP_modules/results/1D_test_results/sparse_gp_minSnap_1D.jpg)
 
-### (2) sparse GP smoothing on SO(3)
+### (2) same interpolation results as polynomials
+`min-acc prior gp(red solid) vs cubic polynomial(blue dash)`  
+![](./GP_modules/results/test2_results/min-Acc_vs_cubic-poly_interp.jpg)
+
+`min-jerk prior gp(red solid) vs quintic polynomial(blue dash)`  
+![](./GP_modules/results/test2_results/min-Jerk_vs_quintic-poly_interp.jpg)
+
+### (3) sparse GP smoothing on SO(3)
 `test path`
 ![](./GP_modules/results/SO3_test_results/test_path_sphere.jpg)
 
@@ -45,6 +52,7 @@ source code in `\GP_modules`
 source codes in `/gpmp`
 
 ### 2-D point trajectory planning results: 
+#### (1) unconstrained case:
 ```matlab
 % init coeffs
 omega = 3000; %obs cost coeffs
@@ -57,5 +65,16 @@ options.MaxIter = 500;
 options.TolFun = 1e-2;
 ```
 
-`path history:`  
+`path history:`   
 ![](./gpmp/results/result1_fixbound2D/traj_deform_history.jpg)
+
+`speed profile:`  
+![](./gpmp/results/result1_fixbound2D/speed_profile.jpg)
+
+#### (2) constrained case:
+
+`path history:`    
+![](./gpmp/results/result2_cons_fixbound2D/traj_deform_history.jpg)
+
+`speed profile:`  
+![](./gpmp/results/result2_cons_fixbound2D/speed_profile.jpg)
