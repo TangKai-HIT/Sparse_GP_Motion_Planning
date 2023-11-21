@@ -1,0 +1,20 @@
+# init coeffs
+omega = 3000; %obs cost coeffs
+lambda = 1; %prior cost coeffs
+eta = 100; %regularization coeffs
+
+% set options
+options = gpmp_optimset_init();
+options.FixedStateId = [1, 5];
+options.MaxIter = 500;
+options.TolFun = 1e-3;
+
+% set constraints
+posRange = [0, 1; 0.4, 0.6];
+velRange = [-inf, inf; -0.3, 0.3];
+accRange = [-inf, inf; -0.6, 0.6];
+
+#outputs
+solve time: 0.2335 (s)
+iterations: 128
+exitFlag: 1
