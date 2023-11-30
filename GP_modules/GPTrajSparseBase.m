@@ -147,7 +147,7 @@ classdef GPTrajSparseBase < handle
             end
         end
 
-        function [Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp] = upSampleInterval(obj, l_id, u_id, tau_samp)
+        function [Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp, kappa_inv_samp] = upSampleInterval(obj, l_id, u_id, tau_samp)
             %UPSAMPLEINTERVAL upsample in a support state interval given samples of index 
             %   Inputs:
             %       l_id, u_id: lower id and upper id of the interval 
@@ -156,7 +156,8 @@ classdef GPTrajSparseBase < handle
             %       Lambda_samp, Psi_samp, mu_samp, sampPts(optional): array, (n_sp*dim) X 1
             %       mu_samp: (n_sp*dim) X 1, mu of sampled points 
             %       sampPts (optional): (n_sp*dim) X 1, sampled points 
-            %       kappa_samp (optional): (n_sp*dim) X (n_sp*dim)
+            %       kappa_samp (optional):  (n_sp*dim) X (n_sp*dim)
+            %       kappa_inv_samp(optional):  (n_sp*dim) X (n_sp*dim)
             
             l = obj.supportId(l_id);
             u = obj.supportId(u_id);
@@ -164,6 +165,8 @@ classdef GPTrajSparseBase < handle
 
             %compute intermedian terms
             Q_l_samp = zeros(n_sp*obj.dim, n_sp*obj.dim);
+            Q_samp = Q_l_samp;
+            Q_inv_samp = Q_samp;
             Phi_samp_u_T = zeros(n_sp*obj.dim, obj.dim);
             Phi_l_samp = zeros(n_sp*obj.dim, obj.dim);
             VVec_samp = zeros(n_sp*obj.dim, 1);
@@ -171,20 +174,28 @@ classdef GPTrajSparseBase < handle
             for i=1:n_sp
                 cur_id = (i-1)*obj.dim+1 : i*obj.dim;
                 Q_l_samp(cur_id, cur_id) = obj.QMat(l, tau_samp(i));
+                
+                if i<2
+                    Q_samp(cur_id, cur_id) = Q_l_samp(cur_id, cur_id);
+                else
+                    Q_samp(cur_id, cur_id) = obj.QMat(tau_samp(i-1), tau_samp(i));
+                end
+                Q_inv_samp(cur_id, cur_id) = inv(Q_samp(cur_id, cur_id));
+
                 Phi_samp_u_T(cur_id, :) = obj.transMat(u, tau_samp(i))';
                 Phi_l_samp(cur_id, :) = obj.transMat(tau_samp(i), l);
                 VVec_samp(cur_id, :) = obj.VVec(l, tau_samp(i));
             end
 
-            rowId_u = (u_id-1)*obj.dim+1 : u_id*obj.dim; %term in i+1 index
-            rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in i index
+            rowId_u = (u_id-1)*obj.dim+1 : u_id*obj.dim; %term in u_id index
+            rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in l_id index
 
             if u_id>l_id+1 %support state not adjancent (vital)
                 Q_u_inv = inv(obj.QMat(l, u));
             else %support state adjacent
                 Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
-            end
-            
+            end                     
+
             %compute interpolator
             gamma_samp = Q_l_samp * Phi_samp_u_T; %get gamma_{1~n_sp} sampled vector
             Psi_samp = gamma_samp * Q_u_inv; %get Psi_{1~n_sp} sampled vector
@@ -206,16 +217,38 @@ classdef GPTrajSparseBase < handle
             if nargout>4 %optional output
                 %A--trans mat
                 A = eye(n_sp*obj.dim);
+                A_inv = A;
                 for i = 2:n_sp
                     cur_rowId = (i-1)*obj.dim+1:i*obj.dim;
                     for j = 1:i-1
                         cur_colId = (j-1)*obj.dim+1:j*obj.dim; 
                         A(cur_rowId, cur_colId) = obj.transMat(tau_samp(i), tau_samp(j));
+
+                        if j==i-1
+                            A_inv(cur_rowId, cur_colId) = -A(cur_rowId, cur_colId); %inverse block
+                        end
                     end
                 end
                 
-                H = A*Q_l_samp;
-                kappa_samp = (H + H' - Q_l_samp) - Psi_samp*gamma_samp';
+                %kappa 
+                % H = A*Q_l_samp;
+                % kappa_samp = (H + H' - Q_l_samp) - Psi_samp*gamma_samp';
+                kappa_samp = A*Q_samp*A' - Psi_samp*gamma_samp';
+
+                %kappa inverse
+                kappa_inv_samp = [];
+                % kappa_inv_tau = A_inv' * Q_inv_samp * A_inv; %inverse of kappa_tau_tau
+                % kappa_l = obj.supportKappa(rowId_l, rowId_l); %kappa lower
+                % kappa_l_u = obj.supportKappa([rowId_l, rowId_u], [rowId_l, rowId_u]); %kappa lower-upper
+                % 
+                % V_tau = [Phi_l_samp*kappa_l, gamma_samp];
+                % A_lu = eye(2*obj.dim);
+                % A_lu(obj.dim+1:end, 1:obj.dim) = Phi_l_u;
+                % kappa_tau_lu = V_tau * A_lu';
+                % 
+                % kappa_lu_cond = kappa_l_u - kappa_tau_lu' * kappa_inv_tau * kappa_tau_lu;
+                % temp = kappa_inv_tau*kappa_tau_lu;
+                % kappa_inv_samp = kappa_inv_tau + temp * (kappa_lu_cond \ temp');
             end
         end
 

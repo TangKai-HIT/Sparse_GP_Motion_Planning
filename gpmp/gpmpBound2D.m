@@ -180,13 +180,13 @@ classdef gpmpBound2D < gpmpBase
                         b(jerkId + numActiveSamp) = -obj.constraints.jerkRange(i, 1);
                     end
                 end
+
+                b = b - [M_f*x_f; -M_f*x_f]; %reduce fixed parts
+                
+                rmId = find(b==inf | b==-inf);
+                b(rmId) = []; %remove unbounded constraints
+                A(rmId, :) = [];
             end
-
-            b = b - [M_f*x_f; -M_f*x_f]; %reduce fixed parts
-
-            rmId = find(b==inf | b==-inf);
-            b(rmId) = []; %remove unbounded constraints
-            A(rmId, :) = [];
 
             %iteration
             results.exitFlag = 0;
