@@ -16,7 +16,7 @@ for i = 1:N
             case 1
                 result(i, :) = [-1, 1, zeros(1, N-2)] / delta_s(1);
             case 2
-                result(i, :) = [1/delta_s(1)^2,  -(1/(delta_s(1)*delta_s(2)) + 1/delta_s(2)^2), 1/(delta_s(1)*delta_s(2)), zeros(1, N-3)];
+                result(i, :) = [1/delta_s(1)^2,  -(1/(delta_s(1)*delta_s(2)) + 1/delta_s(1)^2), 1/(delta_s(1)*delta_s(2)), zeros(1, N-3)];
             otherwise
                 disp('order <=2!');
                 result = [];
