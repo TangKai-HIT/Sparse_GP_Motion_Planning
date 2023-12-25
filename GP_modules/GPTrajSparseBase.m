@@ -191,8 +191,10 @@ classdef GPTrajSparseBase < handle
             rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in l_id index
 
             if u_id>l_id+1 %support state not adjancent (vital)
-                Q_u_inv = inv(obj.QMat(l, u));
+                Q_u = obj.QMat(l, u);
+                Q_u_inv = inv(Q_u);
             else %support state adjacent
+                Q_u = obj.supportQ(rowId_u, rowId_u); %Q_{i+1}
                 Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
             end                     
 
@@ -236,19 +238,9 @@ classdef GPTrajSparseBase < handle
                 kappa_samp = A*Q_samp*A' - Psi_samp*gamma_samp';
 
                 %kappa inverse
-                kappa_inv_samp = [];
-                % kappa_inv_tau = A_inv' * Q_inv_samp * A_inv; %inverse of kappa_tau_tau
-                % kappa_l = obj.supportKappa(rowId_l, rowId_l); %kappa lower
-                % kappa_l_u = obj.supportKappa([rowId_l, rowId_u], [rowId_l, rowId_u]); %kappa lower-upper
-                % 
-                % V_tau = [Phi_l_samp*kappa_l, gamma_samp];
-                % A_lu = eye(2*obj.dim);
-                % A_lu(obj.dim+1:end, 1:obj.dim) = Phi_l_u;
-                % kappa_tau_lu = V_tau * A_lu';
-                % 
-                % kappa_lu_cond = kappa_l_u - kappa_tau_lu' * kappa_inv_tau * kappa_tau_lu;
-                % temp = kappa_inv_tau*kappa_tau_lu;
-                % kappa_inv_samp = kappa_inv_tau + temp * (kappa_lu_cond \ temp');
+                kappa_inv_tau_tau = A_inv' * Q_inv_samp * A_inv; %inverse of kappa_tau_tau
+                temp = kappa_inv_tau_tau*gamma_samp;
+                kappa_inv_samp = kappa_inv_tau_tau + temp*((Q_u - gamma_samp'*temp)\(temp'));
             end
         end
 

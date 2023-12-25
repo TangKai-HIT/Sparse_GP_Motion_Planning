@@ -32,9 +32,7 @@ classdef gpmpBound2D < gpmpBase
 
             %update conditioned kappa on middle states
             midState_Id = obj.gpTrajSparse.supportId(2:end-1);
-            [~, ~, ~, obj.mu_bound, obj.kappa_bound] = obj.gpTrajSparse.upSampleInterval(1, obj.numSupports, midState_Id);
-            
-            obj.kappa_bound_inv = inv(obj.kappa_bound); %(to do: find simpler formula to compute kappa_bound_inv)
+            [~, ~, ~, obj.mu_bound, obj.kappa_bound, obj.kappa_bound_inv] = obj.gpTrajSparse.upSampleInterval(1, obj.numSupports, midState_Id);
 
             obj.activeId = obj.stateDim+1:(obj.numSupports-1)*obj.stateDim;
         end
