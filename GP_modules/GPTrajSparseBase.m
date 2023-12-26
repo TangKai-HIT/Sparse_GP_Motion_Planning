@@ -147,16 +147,16 @@ classdef GPTrajSparseBase < handle
             end
         end
 
-        function [Lambda_samp, Psi_samp, mu_samp, sampPts, kappa_samp, kappa_inv_samp] = upSampleInterval(obj, l_id, u_id, tau_samp)
+        function [Lambda_samp, Psi_samp, mu_prior_samp, sampPts, kappa_samp, kappa_inv_samp] = upSampleInterval(obj, l_id, u_id, tau_samp)
             %UPSAMPLEINTERVAL upsample in a support state interval given samples of index 
             %   Inputs:
             %       l_id, u_id: lower id and upper id of the interval 
-            %       tau_samp: interpolation index samples
+            %       tau_samp: interior interpolation index samples
             %   Outputs:
-            %       Lambda_samp, Psi_samp, mu_samp, sampPts(optional): array, (n_sp*dim) X 1
-            %       mu_samp: (n_sp*dim) X 1, mu of sampled points 
-            %       sampPts (optional): (n_sp*dim) X 1, sampled points 
-            %       kappa_samp (optional):  (n_sp*dim) X (n_sp*dim)
+            %       Lambda_samp, Psi_samp: array, (n_sp*dim) X 1
+            %       mu_prior_samp: (n_sp*dim) X 1, prior mu of interior sampled states 
+            %       sampPts (optional): (n_sp*dim) X 1, interior sampled states 
+            %       kappa_samp (optional):  (n_sp*dim) X (n_sp*dim), interior sampled states kappa
             %       kappa_inv_samp(optional):  (n_sp*dim) X (n_sp*dim)
             
             l = obj.supportId(l_id);
@@ -210,10 +210,10 @@ classdef GPTrajSparseBase < handle
             mu_u = obj.supportMu(rowId_u, 1);
             xbar_l = obj.supportPts(l_id, :)';
             xbar_u = obj.supportPts(u_id, :)';
-            mu_samp = Phi_l_samp * mu_l + VVec_samp;
+            mu_prior_samp = Phi_l_samp * mu_l + VVec_samp;
             
             if nargout>3 %optional output
-                sampPts = mu_samp + Lambda_samp*(xbar_l-mu_l) + Psi_samp*(xbar_u-mu_u);
+                sampPts = mu_prior_samp + Lambda_samp*(xbar_l-mu_l) + Psi_samp*(xbar_u-mu_u);
             end
 
             if nargout>4 %optional output
@@ -231,16 +231,120 @@ classdef GPTrajSparseBase < handle
                         end
                     end
                 end
-                
                 %kappa 
-                % H = A*Q_l_samp;
-                % kappa_samp = (H + H' - Q_l_samp) - Psi_samp*gamma_samp';
                 kappa_samp = A*Q_samp*A' - Psi_samp*gamma_samp';
-
                 %kappa inverse
                 kappa_inv_tau_tau = A_inv' * Q_inv_samp * A_inv; %inverse of kappa_tau_tau
                 temp = kappa_inv_tau_tau*gamma_samp;
                 kappa_inv_samp = kappa_inv_tau_tau + temp*((Q_u - gamma_samp'*temp)\(temp'));
+            end
+        end
+
+        function [Lambda_samp, Psi_samp, mu_prior_all, sampPts_all, observedPts_all, kappa_all, kappa_inv_all] = upSampleInterval_observeGoal(obj, l_id, u_id, tau_samp, kappa_start, kappa_goal)
+            %UPSAMPLEINTERVAL_OBSERVEGOAL upsample in a support state interval given interior samples of index and goal(upper bound) observation variances
+            %   Inputs:
+            %       l_id, u_id: lower id and upper id of the interval 
+            %       tau_samp: interior interpolation index samples
+            %       kappa_start (optional): dim X dim, variance at start state 
+            %       kappa_goal (optional): dim X dim, variance at observed goal state (state at upper bound)
+            %   Outputs:
+            %       Lambda_samp, Psi_samp: array, (n_sp*dim) X 1, interior sample vectors
+            %       mu_prior_all: ((n_sp+2)*dim) X 1, prior mu of interior sampled states 
+            %       sampPts_all (optional): ((n_sp+2)*dim) X 1, interior sampled states 
+            %       observedPts_all(optional): ((n_sp+2)*dim) X 1, goal state observed conditioned sampled states 
+            %       kappa_samp (optional):  ((n_sp+2)*dim) X ((n_sp+2)*dim)
+            %       kappa_inv_samp(optional):  ((n_sp+2)*dim) X ((n_sp+2)*dim)
+            
+            l = obj.supportId(l_id);
+            u = obj.supportId(u_id);
+            n_sp = length(tau_samp);
+
+            %compute intermedian terms
+            Q_l_samp = zeros(n_sp*obj.dim, n_sp*obj.dim);
+            Q_samp = Q_l_samp;
+            Q_inv_samp = Q_samp;
+            Phi_samp_u_T = zeros(n_sp*obj.dim, obj.dim);
+            Phi_l_samp = zeros(n_sp*obj.dim, obj.dim);
+            VVec_samp = zeros(n_sp*obj.dim, 1);
+
+            for i=1:n_sp
+                cur_id = (i-1)*obj.dim+1 : i*obj.dim;
+                Q_l_samp(cur_id, cur_id) = obj.QMat(l, tau_samp(i));
+                
+                if i<2
+                    Q_samp(cur_id, cur_id) = Q_l_samp(cur_id, cur_id);
+                else
+                    Q_samp(cur_id, cur_id) = obj.QMat(tau_samp(i-1), tau_samp(i));
+                end
+                Q_inv_samp(cur_id, cur_id) = inv(Q_samp(cur_id, cur_id));
+
+                Phi_samp_u_T(cur_id, :) = obj.transMat(u, tau_samp(i))';
+                Phi_l_samp(cur_id, :) = obj.transMat(tau_samp(i), l);
+                VVec_samp(cur_id, :) = obj.VVec(l, tau_samp(i));
+            end
+
+            rowId_u = (u_id-1)*obj.dim+1 : u_id*obj.dim; %term in u_id index
+            rowId_l = (l_id-1)*obj.dim+1 : l_id*obj.dim; %term in l_id index
+
+            if u_id>l_id+1 %support state not adjancent (vital)
+                Q_u = obj.QMat(l, u);
+                Q_u_inv = inv(Q_u);
+            else %support state adjacent
+                Q_u = obj.supportQ(rowId_u, rowId_u); %Q_{i+1}
+                Q_u_inv = obj.supportQ_inv(rowId_u, rowId_u); %Q_{i+1} inverse
+            end                     
+
+            %compute interpolator
+            gamma_samp = Q_l_samp * Phi_samp_u_T; %get gamma_{1~n_sp} sampled vector
+            Psi_samp = gamma_samp * Q_u_inv; %get Psi_{1~n_sp} sampled vector
+
+            Phi_l_u = obj.transMat(u, l);
+            Lambda_samp = Phi_l_samp - Psi_samp * Phi_l_u; %get Lambda_{1~n_sp} sampled vector
+
+            %interpolation
+            mu_l = obj.supportMu(rowId_l, 1);
+            mu_u = obj.supportMu(rowId_u, 1);
+            xbar_l = obj.supportPts(l_id, :)';
+            xbar_u = obj.supportPts(u_id, :)';
+            mu_prior_all = [mu_l; Phi_l_samp * mu_l + VVec_samp; mu_u];
+            
+            if nargout>3 %optional output
+                sampPts_all = mu_prior_all;
+                sampPts_all(obj.dim+1:(n_sp+1)*obj.dim) = mu_prior_all(obj.dim+1:(n_sp+1)*obj.dim) + Lambda_samp*(xbar_l-mu_l) + Psi_samp*(xbar_u-mu_u);
+            end
+
+            if nargout>4 %optional output
+                C = kron([zeros(1,n_sp+1), 1], eye(obj.dim));
+                %extend Q diag matrix
+                Q_goal = obj.QMat(tau_samp(end), u);
+                Q_samp = blkdiag(kappa_start, Q_samp, Q_goal);
+                Q_inv_samp = blkdiag(inv(kappa_start), Q_inv_samp, inv(Q_goal));
+                %A--trans mat
+                A = eye((n_sp+2)*obj.dim);
+                A_inv = A;
+                tau_samp_extend = [l, tau_samp, u];
+                for i = 2:n_sp+2
+                    cur_rowId = (i-1)*obj.dim+1:i*obj.dim;
+                    for j = 1:i-1 
+                        cur_colId = (j-1)*obj.dim+1:j*obj.dim; 
+                        A(cur_rowId, cur_colId) = obj.transMat(tau_samp_extend(i), tau_samp_extend(j));
+
+                        if j==i-1
+                            A_inv(cur_rowId, cur_colId) = -A(cur_rowId, cur_colId); %inverse block
+                        end
+                    end
+                end
+              
+                %kappa
+                kappa_prior = A*Q_samp*A';
+                kappa_prior_inv = A_inv'*Q_inv_samp*A_inv;
+                %kappa inverse
+                temp = kappa_prior * C';
+                kappa_observed = C*temp+kappa_goal;
+                kappa_all = kappa_prior - temp*(kappa_observed\(temp'));
+                kappa_inv_all = kappa_prior_inv + C' * (kappa_goal \ C);
+                %observedPts_all
+                observedPts_all = mu_prior_all + temp*(kappa_observed\(xbar_u - mu_u));
             end
         end
 
