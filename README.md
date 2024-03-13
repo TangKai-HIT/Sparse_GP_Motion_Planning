@@ -33,6 +33,11 @@ source code in `\GP_modules`
 `min-Snap prior`
 ![min-Snap prior](./GP_modules/results/1D_test_results/sparse_gp_minSnap_1D.jpg)
 
+#### sparse GP trajectory sampling  
+`min-Jerk case`:  
+($\boldsymbol{Q}_c$ as variance, 5 interior states for sampling, make 10 samples)  
+![min-jerk samples](./GP_modules/results/1D_test_results/SGP_sampTraj2.jpg)  
+
 ### (2) same interpolation results as polynomials
 `min-acc prior gp(red solid) vs cubic polynomial(blue dash)`  
 ![](./GP_modules/results/test2_results/min-Acc_vs_cubic-poly_interp.jpg)
